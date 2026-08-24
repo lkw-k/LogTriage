@@ -1,0 +1,86 @@
+# log-anomaly-classifier 기본 설정
+# 이 파일이 label_map 의 유일한 정본이다. 코드에 복사하지 말 것. (CLAUDE.md 절대규칙 3)
+
+seed: 42
+
+paths:
+  raw_bgl:    data/raw/BGL.log
+  raw_nasa:   data/raw/nasa.csv
+  parsed:     data/interim/bgl_parsed.parquet
+  labeled:    data/interim/bgl_labeled.parquet
+  normalized: data/interim/bgl_norm.parquet
+  processed:  data/processed
+  runs:       runs
+
+# ---------------------------------------------------------------- 라벨 매핑
+# 41개 원본 카테고리 -> 4클래스.
+# 매핑되지 않은 카테고리가 하나라도 있으면 label_map 은 에러로 중단한다.
+label_map:
+  normal:     ["-"]
+  kernel_mem: [KERNDTLB, KERNSTOR, KERNMICRO, KERNMC, KERNFLOAT, KERNBIT, KERNTLBE]
+  kernel_ops: [KERNMNTF, KERNTERM, KERNREC, KERNRTSP, KERNMNT, KERNSOCK,
+               KERNPOW, KERNSERV, KERNPAN, KERNCON, KERNNOETH, KERNPROG,
+               KERNRTSA, KERNEXT]
+  app:        [APPSEV, APPREAD, APPRES, APPUNAV, APPTO, APPOUT, APPBUSY,
+               APPCHILD, APPALLOC, APPTORUS]
+
+# 학습·평가에서 제외. unknown 메커니즘 검증용으로만 사용 (총 271건)
+# macro F1 계산에 포함하지 않는다.
+holdout_rare: [LINKIAP, LINKDISC, LINKPAP, LINKBLL,
+               MASABNORM, MASNORM, MONPOW, MONNULL, MONILL, MMCS]
+
+# ---------------------------------------------------------------- 분할
+split:
+  by: unix_ts        # 오름차순 정렬 기준. 랜덤 분할 금지.
+  ratios: [0.70, 0.15, 0.15]
+
+# ---------------------------------------------------------------- 샘플링
+sample:
+  strategy: none     # none | ratio | balanced. train 에만 적용.
+  ratio_normal_to_alert: 3   # strategy=ratio 일 때 정상 = 이상합계 * 3
+
+# ---------------------------------------------------------------- 입력 구성
+dataset:
+  input_mode: msg_only   # msg_only | with_meta
+                         # with_meta 는 component+level 을 붙인다. E5 비교용이며 대표 성능이 아니다.
+  max_length: 64         # msg_norm 토큰 길이 95 백분위수로 확정할 것
+
+# ---------------------------------------------------------------- 학습
+train:
+  model_name: bert-base-uncased
+  num_labels: 4
+  loss: cross_entropy
+  class_weight: true     # w_c = N / (K * n_c). strategy=balanced 이면 false.
+  optimizer: adamw
+  learning_rate: 2.0e-5
+  weight_decay: 0.01
+  scheduler: linear
+  warmup_ratio: 0.1
+  batch_size: 32
+  max_epochs: 5
+  early_stopping:
+    metric: val_macro_f1
+    patience: 2
+
+# ---------------------------------------------------------------- 평가
+evaluate:
+  primary_metric: macro_f1   # accuracy 는 대표 지표로 쓰지 않는다 (정상 92.7%)
+  n_error_samples: 50
+
+# ---------------------------------------------------------------- 추론 / 판정
+# 평시 기준선(class_ratio_mean/std)은 calibrate 가 train 구간에서 계산해
+# runs/<exp_id>/calibration.json 에 저장한다. 추론 시 실시간 재계산 금지.
+infer:
+  window: 1min
+  conf_threshold: 0.65   # 최대 softmax 확률이 이 값 미만이면 unknown. val 에서 확정할 것.
+  min_count: 5           # 비율 판정에 필요한 최소 건수 (로그 적은 구간 오탐 방지)
+  z_warning: 3.0
+  z_critical: 5.0
+  unknown_ratio_warning: 0.10
+  top_samples: 3
+
+# ---------------------------------------------------------------- 발생량 감지기
+traffic:
+  bucket: 1min
+  ewma_span: 60
+  z_threshold: 3.0

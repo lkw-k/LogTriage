@@ -1,0 +1,20 @@
+# 데이터·산출물 (CLAUDE.md 절대규칙 5)
+data/
+runs/
+
+# python
+__pycache__/
+*.py[cod]
+.venv/
+*.egg-info/
+
+# 도구 캐시
+.pytest_cache/
+.ruff_cache/
+.ipynb_checkpoints/
+
+# 에디터·OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
