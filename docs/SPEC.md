@@ -53,6 +53,8 @@ log-anomaly-classifier/
 │       └── detect.py
 ├── notebooks/
 │   └── 00_explore.ipynb
+├── docs/
+│   └── SPEC.md         # 이 문서
 ├── experiments.md
 └── README.md
 ```
@@ -111,20 +113,36 @@ parts = line.split(maxsplit=9)   # 헤더 9개 + 메시지 통째로
 - 입력: `bgl_parsed.parquet`
 - 출력: `bgl_labeled.parquet` (+ `label4` 컬럼)
 
-41개 원본 카테고리를 4개로 묶는다. 매핑은 `configs/base.yaml` 에 명시한다.
+41개 원본 카테고리를 4개로 묶는다. **매핑의 정본은 `configs/base.yaml` 한 곳이다.**
+코드에도, 이 문서에도 전체 목록을 복사하지 않는다. 아래는 클래스 정의만 적는다.
 
-```yaml
-label_map:
-  normal:   ["-"]
-  kernel_hw: [KERNDTLB, KERNSTOR, KERNTERM, KERNMNTF, ...]
-  app:       [APPSEV, APPBUSY, ...]
-  other:     [...]
-```
+| 클래스 | 건수 | 알럿 대비 | 의미 | 운영자가 볼 곳 |
+|---|---|---|---|---|
+| `normal` | 4,399,503 | — | 정상 (`-`) | — |
+| `kernel_mem` | 218,075 | 62.6% | 메모리·주소변환 오류 | 하드웨어 |
+| `kernel_ops` | 66,269 | 19.0% | 마운트·종료·복구 실패 | 시스템 설정 |
+| `app` | 63,845 | 18.3% | 애플리케이션 오류 | 코드 |
+
+`kernel_*` 를 하나로 두지 않고 둘로 나눈 이유는 운영자의 행동이 갈리기 때문이다.
+메모리 오류는 하드웨어를 보고, 마운트·종료 실패는 시스템 설정을 본다.
 
 **규칙: 매핑되지 않은 카테고리가 하나라도 있으면 에러로 중단한다.**
-조용히 `other` 로 넣으면 나중에 성능이 이상할 때 원인을 못 찾는다.
+조용히 기타 클래스로 넣으면 나중에 성능이 이상할 때 원인을 못 찾는다.
+`other` 같은 잡동사니 클래스는 두지 않는다 — 의미가 섞여서 그 클래스의 F1 을 해석할 수 없다.
 
-> 이 매핑은 실제 라벨 분포를 확인한 뒤 확정한다. (현재 미정)
+`LINK*` / `MAS*` / `MON*` / `MMCS` 계열 271건은 `holdout_rare` 로 분리한다.
+건수가 너무 적어 별도 클래스로 학습이 불가능하다. 버리지 않고 **모델이 한 번도 보지 못한
+카테고리**로 남겨, 추론 시 `unknown` 으로 분류되는지 확인하는 데 쓴다 (5-5 참조).
+학습·평가에서 제외하며 macro F1 계산에도 넣지 않는다.
+
+> 이 그룹핑은 공식 분류가 아니라 이 프로젝트에서 정한 기준이다.
+> BGL 알럿 코드에 대한 완전한 공식 문서가 없어 코드명을 근거로 판단했다.
+> 경계가 애매한 항목이 있다 (예: `KERNPOW` 는 전원 관련이라 `kernel_mem` 으로 봐도 무방).
+> README 에 이 사실을 명시한다.
+
+**재검토 조건**: `evaluate` 의 혼동행렬에서 `kernel_mem` ↔ `kernel_ops` 오분류가
+**양방향으로** 심하면 모델 성능 문제가 아니라 매핑 경계가 잘못 그어졌다는 신호일 수 있다.
+이 경우 임의로 바꾸지 말고 사람에게 보고한다.
 
 ### 3-3. normalize.py
 
@@ -328,7 +346,7 @@ predict(lines: list[str], window: str = "1min") -> InferResult
 **줄 단위 출력** (`predictions.jsonl`)
 
 ```json
-{"ts": 1117838570, "pred": "kernel_hw", "conf": 0.94, "raw": "KERNDTLB ..."}
+{"ts": 1117838570, "pred": "kernel_mem", "conf": 0.94, "raw": "KERNDTLB ..."}
 ```
 
 **구간 단위 출력** (`windows.jsonl`) — 사람이 실제로 보는 것
@@ -337,18 +355,18 @@ predict(lines: list[str], window: str = "1min") -> InferResult
 {
   "window_start": "2005-06-03T15:42:00",
   "n_logs": 1204,
-  "class_counts": {"normal": 1180, "kernel_hw": 20, "app": 3, "other": 1, "unknown": 0},
+  "class_counts": {"normal": 1180, "kernel_mem": 20, "kernel_ops": 1, "app": 3, "unknown": 0},
   "anomaly_ratio": 0.0199,
   "traffic": {"count": 1204, "baseline": 800.2, "z": 3.8, "flag": "spike"},
   "alert": {
     "level": "warning",
     "reasons": [
-      "kernel_hw 비율 1.7% (평시 0.3%)",
+      "kernel_mem 비율 1.7% (평시 0.3%)",
       "트래픽 급증 z=3.8"
     ]
   },
   "top_samples": [
-    {"raw": "KERNDTLB ... data TLB error interrupt", "pred": "kernel_hw", "conf": 0.97}
+    {"raw": "KERNDTLB ... data TLB error interrupt", "pred": "kernel_mem", "conf": 0.97}
   ]
 }
 ```
@@ -363,8 +381,8 @@ predict(lines: list[str], window: str = "1min") -> InferResult
 
 ```json
 {
-  "class_ratio_mean": {"kernel_hw": 0.003, "app": 0.0005, "other": 0.0008},
-  "class_ratio_std":  {"kernel_hw": 0.002, "app": 0.0004, "other": 0.0006},
+  "class_ratio_mean": {"kernel_mem": 0.003, "kernel_ops": 0.0008, "app": 0.0005},
+  "class_ratio_std":  {"kernel_mem": 0.002, "kernel_ops": 0.0006, "app": 0.0004},
   "traffic_ewma_span": 60,
   "conf_threshold": 0.65
 }

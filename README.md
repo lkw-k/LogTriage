@@ -6,7 +6,7 @@
 기존 로그 이상탐지 모델은 대부분 정상/이상 2클래스다. 이 프로젝트는 원인까지 구분해
 운영자가 알림을 받았을 때 **어디를 봐야 할지** 바로 알 수 있게 하는 것이 목표다.
 
-- 설계 문서: [SPEC.md](SPEC.md)
+- 설계 문서: [docs/SPEC.md](docs/SPEC.md)
 - 작업 규칙: [CLAUDE.md](CLAUDE.md)
 - 실험 기록: [experiments.md](experiments.md)
 
@@ -53,7 +53,12 @@ uv sync
 
 Python 3.11. `pip` 을 직접 호출하지 않는다.
 
+의존성은 재현성을 위해 `pyproject.toml` 에 정확한 버전으로 고정했다.
+특히 **`transformers` 는 5.x 다.** 인터넷에 도는 4.x 예제(`Trainer` 인자, 토크나이저 호출 방식)를
+그대로 옮기면 동작하지 않는다. 5.x 문서를 기준으로 작성한다.
+
 GPU 학습이 필요하면 CPU 빌드 torch 를 CUDA 빌드로 교체한다 (기본은 CPU 빌드).
+`torch==2.13.0` 은 로컬 버전 태그를 포함하므로 `2.13.0+cu124` 같은 CUDA 빌드도 이 핀에 맞는다.
 
 ## 실행
 
