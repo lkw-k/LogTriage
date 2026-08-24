@@ -1,7 +1,7 @@
 [project]
 name = "log-anomaly-classifier"
 version = "0.1.0"
-requires-python = ">=3.11"
+requires-python = ">=3.11,<3.12"
 dependencies = [
     "matplotlib>=3.11.1",
     "pandas>=3.0.5",
@@ -18,3 +18,12 @@ dev = [
     "pytest>=9.1.1",
     "ruff>=0.16.4",
 ]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP"]
