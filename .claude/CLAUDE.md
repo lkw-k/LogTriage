@@ -62,9 +62,11 @@ roll back one step to find where it broke; batched commits make the cause unreco
 maxsplit=9**, plain `split()` breaks on spaces inside the message.
 
 **34,470 lines (0.726%) have 9 headers and an empty message.** Valid records, not parse
-failures. All 100% `normal`. Keeping them (as `""` or `[EMPTY]`) creates a perfect
-"empty ⇒ normal" shortcut that inflates macro F1. **Policy changes need human approval;**
-log count + share + per-class distribution to stdout and `experiments.md`.
+failures — `parse_bgl` keeps them with `message=""`. All 100% `normal`, so keeping them in
+training (as `""` or `[EMPTY]`) would make "empty ⇒ normal" a perfect shortcut that inflates
+macro F1. **Decided: `label_map` splits them into `bgl_empty_msg.parquet`, out of training.**
+Reversing this needs human approval; log count + share + per-class distribution to stdout and
+`experiments.md`. See the entry in `experiments.md`.
 
 **nasa.csv** (volume detector only) — `host,time,method,url,response,bytes`.
 Drop `Unnamed: 0`; drop rows with null `response`/`bytes`.
@@ -98,15 +100,20 @@ on your own.
 | 1 | node id | `R\d+-M\d+-N\d+-C:J\d+-U\d+` | `[NODE]` |
 | 2 | ip | `\d+\.\d+\.\d+\.\d+` | `[IP]` |
 | 3 | hex | `0x[0-9a-fA-F]+` | `[HEX]` |
-| 4 | path | `(/[\w.\-]+)+` | `[PATH]` |
+| 4 | path | `(?<![\w])(/[\w.\-]+)+` | `[PATH]` |
 | 5 | remaining digits | `\d+` | `[NUM]` |
 
 **Digits last** — substituting them first shatters node ids.
 
-Path regex over-matches (`and/or` → `and[PATH]`). `normalize` must report:
-(1) non-empty messages that became empty — **must be 0**, (2) 200 before/after `[PATH]`
-samples, (3) unique-message drop (100k-scale → 1k-scale). If (1) ≠ 0, report the dump before
-changing any regex.
+**Keep the `(?<![\w])` guard on the path rule.** Without it a slash inside a word matches:
+`load/store` → `load[PATH]`, `BG/L` → `BG[PATH]`, `Torus/Tree/GI` → `Torus[PATH]`. That is
+input corruption, not a model problem — `load/store` is the memory-access term that points at
+`kernel_mem`. Real paths start after a space, `=` or `(`, so the guard doesn't affect them.
+
+`normalize` reports three checks: (1) non-empty messages that became empty — **must be 0**,
+(2) 200 before/after `[PATH]` samples dumped for review, (3) unique-message drop.
+Baseline on full data: 358,329 → 24,693 unique (93.1%), 0 emptied, 0 mid-word `[PATH]`.
+If (1) ≠ 0, report the dump before changing any regex.
 
 ## Done conditions
 
