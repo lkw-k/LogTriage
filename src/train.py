@@ -209,6 +209,9 @@ def main():
                     help="early_stopping.metric 을 이번 실행에만 덮어쓴다")
     ap.add_argument("--no-class-weight", action="store_true",
                     help="train.class_weight 를 이번 실행에만 끈다")
+    ap.add_argument("--max-epochs", type=int,
+                    help="train.max_epochs 를 이번 실행에만 덮어쓴다. "
+                         "LR 스케줄 길이도 같이 바뀐다. 5에폭 계획의 1에폭째와 같지 않다.")
     ap.add_argument("--config", default=config.DEFAULT_CONFIG)
     args = ap.parse_args()
 
@@ -218,6 +221,8 @@ def main():
         tcfg["early_stopping"]["metric"] = args.select_metric
     if args.no_class_weight:
         tcfg["class_weight"] = False
+    if args.max_epochs:
+        tcfg["max_epochs"] = args.max_epochs
     metric = tcfg["early_stopping"]["metric"]
     if metric not in METRICS:
         raise SystemExit(f"early_stopping.metric 이 {metric} 이다. {METRICS} 중 하나여야 한다.")
