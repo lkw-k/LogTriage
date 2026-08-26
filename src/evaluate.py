@@ -4,6 +4,9 @@
   y_true, y_pred, msg_norm  (+ 선택: p_normal, p_kernel_mem, p_kernel_ops, p_app)
 확률 컬럼이 val/test 양쪽에 있으면 클래스 가중치를 val 에서 맞춰 test 에 적용한다.
 val 에서만 맞춘다 — test 를 보며 맞추면 그 숫자는 일반화 추정치가 아니다.
+
+전체 macro F1 과 함께 **기등장/미등장 템플릿 부분집합**을 따로 채점한다.
+모델 비교 판정은 미등장 쪽으로 한다 (docs/RISKS.md 9, SPEC 4-3).
 """
 
 import argparse
@@ -60,6 +63,16 @@ def tune_weights(y_true, probs, grid=WEIGHT_GRID, passes=3):
     return w, best
 
 
+def seen_mask(msgs, train_ref):
+    """학습에 등장했던 템플릿인가. 아니면 미등장이다.
+
+    전체 macro F1 은 기등장 구간의 암기분이 섞여 있어 모델 비교에 쓸 수 없다
+    (docs/RISKS.md 9). 판정은 미등장 부분집합으로 한다.
+    """
+    ref = set(pd.read_parquet(train_ref, columns=["msg_norm"])["msg_norm"])
+    return msgs.isin(ref).to_numpy()
+
+
 def confusion(y_true, y_pred):
     idx = {c: i for i, c in enumerate(CLASSES)}
     cm = np.zeros((len(CLASSES), len(CLASSES)), dtype=int)
@@ -112,6 +125,7 @@ def main():
     ap.add_argument("--exp-id", required=True)
     ap.add_argument("--split", default="test", choices=["val", "test"])
     ap.add_argument("--baseline", choices=["majority"], help="예측 파일 없이 E0 를 만든다")
+    ap.add_argument("--train-ref", help="미등장 판정 기준. 기본 processed/train.parquet")
     ap.add_argument("--config", default=config.DEFAULT_CONFIG)
     args = ap.parse_args()
 
@@ -141,6 +155,15 @@ def main():
     s = score(y_true, y_pred)
     report("argmax", s)
     out["argmax"] = s
+
+    train_ref = Path(args.train_ref) if args.train_ref else processed / "train.parquet"
+    seen = seen_mask(df["msg_norm"], train_ref)
+    for key, name, mask in [("seen", "기등장", seen), ("unseen", "미등장", ~seen)]:
+        share = float(mask.mean() * 100)
+        sub = score(y_true[mask], y_pred[mask])
+        report(f"{name} 템플릿 {mask.sum():,}행 ({share:.1f}%)", sub)
+        out[key] = sub | {"n_rows": int(mask.sum()), "share": share,
+                          "train_ref": train_ref.name}
 
     # 임계값(클래스 가중치) 보정 — val 에서 맞춰 test 에 그대로 적용
     val_path = rundir / "preds_val.parquet"

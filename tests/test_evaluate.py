@@ -4,7 +4,16 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from src.evaluate import CLASSES, PROB_COLS, main, prf, score, tune_weights, weighted_pred
+from src.evaluate import (
+    CLASSES,
+    PROB_COLS,
+    main,
+    prf,
+    score,
+    seen_mask,
+    tune_weights,
+    weighted_pred,
+)
 
 CFG = """
 seed: 42
@@ -112,3 +121,54 @@ def test_calibration_is_fitted_on_val_not_test(tmp_path, monkeypatch):
     m = json.loads((out / "metrics.json").read_text(encoding="utf-8"))
     assert m["calibrated"]["tuned_on"] == "val"
     assert len(m["calibrated"]["weights"]) == 4
+
+
+def test_seen_mask_is_computed_against_the_train_reference(tmp_path):
+    ref = tmp_path / "train.parquet"
+    pd.DataFrame({"msg_norm": ["a", "b", "b"]}).to_parquet(ref, index=False)
+    assert seen_mask(pd.Series(["a", "c", "b", "d"]), ref).tolist() == [True, False, True, False]
+
+
+def split_preds_frame():
+    """기등장/미등장 각각에 4클래스를 모두 넣는다. 한쪽만 실수하게 만든다."""
+    labels = ["normal"] * 40 + ["app"] * 4 + ["kernel_mem"] * 3 + ["kernel_ops"] * 3
+    y = np.array(labels * 2)
+    pred = y.copy()
+    pred[50 + 40 : 50 + 44] = "normal"          # 미등장 쪽 app 4건만 틀린다
+    msgs = [f"m{i}" for i in range(50)] + [f"u{i}" for i in range(50)]
+    return pd.DataFrame({"y_true": y, "y_pred": pred, "msg_norm": msgs})
+
+
+def test_metrics_report_seen_and_unseen_template_subsets(tmp_path, monkeypatch):
+    """미등장 템플릿 부분집합이 모델 비교의 판정 기준이다 (docs/RISKS.md 9)."""
+    cfg, runs = write_cfg(tmp_path)          # 참조 train 의 템플릿은 m0..m99
+    out = runs / "E2"
+    out.mkdir(parents=True)
+    split_preds_frame().to_parquet(out / "preds_test.parquet", index=False)
+
+    monkeypatch.setattr("sys.argv", ["evaluate", "--exp-id", "E2", "--config", str(cfg)])
+    main()
+    m = json.loads((out / "metrics.json").read_text(encoding="utf-8"))
+    assert m["seen"]["n_rows"] == 50 and m["unseen"]["n_rows"] == 50
+    assert m["seen"]["macro_f1"] == 1.0
+    assert m["unseen"]["macro_f1"] < 1.0
+    assert m["unseen"]["per_class"]["app"]["f1"] == 0.0
+
+
+def test_train_ref_can_be_overridden(tmp_path, monkeypatch):
+    """참조 train 을 바꾸면 미등장 집합도 바뀐다."""
+    cfg, runs = write_cfg(tmp_path)
+    out = runs / "E2"
+    out.mkdir(parents=True)
+    split_preds_frame().to_parquet(out / "preds_test.parquet", index=False)
+    ref = tmp_path / "everything.parquet"
+    pd.DataFrame({"msg_norm": [f"m{i}" for i in range(50)] + [f"u{i}" for i in range(50)]}
+                 ).to_parquet(ref, index=False)
+
+    monkeypatch.setattr(
+        "sys.argv",
+        ["evaluate", "--exp-id", "E2", "--config", str(cfg), "--train-ref", str(ref)],
+    )
+    main()
+    m = json.loads((out / "metrics.json").read_text(encoding="utf-8"))
+    assert m["seen"]["n_rows"] == 100 and m["unseen"]["n_rows"] == 0
