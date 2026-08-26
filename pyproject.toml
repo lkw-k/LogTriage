@@ -27,3 +27,13 @@ line-length = 100
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP"]
+
+# torch 는 PyPI 기본 휠이 CPU 전용이라 CUDA 인덱스를 명시한다.
+# RTX 4070 = Ada(sm_89). cu130 휠도 있으나 검증 폭이 넓은 cu126 을 쓴다.
+[[tool.uv.index]]
+name = "pytorch-cu126"
+url = "https://download.pytorch.org/whl/cu126"
+explicit = true
+
+[tool.uv.sources]
+torch = { index = "pytorch-cu126" }
