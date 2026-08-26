@@ -122,10 +122,22 @@ def test_write_preds_matches_what_evaluate_reads(tmp_path):
 def test_fingerprint_separates_selection_regimes():
     """선택 기준이나 inner split 이 다르면 이어서 학습하면 안 된다."""
     tcfg = {"model_name": "bert", "batch_size": 32, "max_epochs": 5,
-            "learning_rate": 2e-5, "early_stopping": {"metric": "val_macro_f1"}}
+            "learning_rate": 2e-5, "class_weight": True,
+            "early_stopping": {"metric": "val_macro_f1"}}
     dcfg = {"max_length": 64, "input_mode": "msg_only"}
     plain = fingerprint(tcfg, dcfg, "train.parquet", 10, 0.0)
     split = fingerprint(tcfg, dcfg, "train.parquet", 10, 0.2)
     assert plain != split
     tcfg["early_stopping"]["metric"] = "inner_val_unseen_macro_f1"
     assert fingerprint(tcfg, dcfg, "train.parquet", 10, 0.2) != split
+
+
+def test_fingerprint_separates_class_weight():
+    """가중치를 끈 실행은 켠 실행의 체크포인트에서 이어받으면 안 된다."""
+    tcfg = {"model_name": "bert", "batch_size": 32, "max_epochs": 5,
+            "learning_rate": 2e-5, "class_weight": True,
+            "early_stopping": {"metric": "val_macro_f1"}}
+    dcfg = {"max_length": 64, "input_mode": "msg_only"}
+    on = fingerprint(tcfg, dcfg, "train.parquet", 10, 0.0)
+    tcfg["class_weight"] = False
+    assert fingerprint(tcfg, dcfg, "train.parquet", 10, 0.0) != on

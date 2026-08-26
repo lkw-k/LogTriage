@@ -69,6 +69,7 @@ def fingerprint(tcfg, dcfg, train_path, n_rows, inner_val_frac):
         "input_mode": dcfg["input_mode"],
         "inner_val_frac": float(inner_val_frac),
         "select_metric": tcfg["early_stopping"]["metric"],
+        "class_weight": bool(tcfg["class_weight"]),
     }
 
 
@@ -206,6 +207,8 @@ def main():
                     help="train 뒤쪽을 시간순으로 떼어 미등장 템플릿 검증셋으로 쓴다 (0 이면 끔)")
     ap.add_argument("--select-metric", choices=METRICS,
                     help="early_stopping.metric 을 이번 실행에만 덮어쓴다")
+    ap.add_argument("--no-class-weight", action="store_true",
+                    help="train.class_weight 를 이번 실행에만 끈다")
     ap.add_argument("--config", default=config.DEFAULT_CONFIG)
     args = ap.parse_args()
 
@@ -213,6 +216,8 @@ def main():
     tcfg, dcfg = cfg["train"], cfg["dataset"]
     if args.select_metric:
         tcfg["early_stopping"]["metric"] = args.select_metric
+    if args.no_class_weight:
+        tcfg["class_weight"] = False
     metric = tcfg["early_stopping"]["metric"]
     if metric not in METRICS:
         raise SystemExit(f"early_stopping.metric 이 {metric} 이다. {METRICS} 중 하나여야 한다.")
@@ -234,7 +239,9 @@ def main():
     tr = pd.read_parquet(train_path, columns=tr_cols)
     val = pd.read_parquet(processed / "val.parquet", columns=cols)
     fp = fingerprint(tcfg, dcfg, train_path, len(tr), args.inner_val_frac)
-    print(f"train {len(tr):,}줄 ({train_path.name}) | val {len(val):,}줄 | device {device}")
+    cw = "켬" if tcfg["class_weight"] else "끔"
+    print(f"train {len(tr):,}줄 ({train_path.name}) | val {len(val):,}줄 | "
+          f"device {device} | 클래스 가중치 {cw}")
 
     iv, iv_unseen = None, None
     if args.inner_val_frac:
