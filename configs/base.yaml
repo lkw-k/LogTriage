@@ -36,8 +36,13 @@ split:
 
 # ---------------------------------------------------------------- 샘플링
 sample:
-  strategy: none     # none | ratio | balanced. train 에만 적용.
+  strategy: none     # none | ratio | balanced | dedup | cap. train 에만 적용.
   ratio_normal_to_alert: 3   # strategy=ratio 일 때 정상 = 이상합계 * 3
+  cap_per_template: 2000     # strategy=cap 일 때 템플릿당 최대 행 수.
+                             # train 은 고유 템플릿 16,945종에 194.7배 중복이다.
+                             # 2000 이면 3,299,255 -> 332,955 줄이면서
+                             # 정상 비율 92.25% -> 92.28% 로 사실상 유지된다.
+                             # dedup(완전 제거)은 kernel_mem 이 9줄로 무너진다.
 
 # ---------------------------------------------------------------- 입력 구성
 dataset:
