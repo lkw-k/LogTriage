@@ -48,7 +48,10 @@ sample:
 dataset:
   input_mode: msg_only   # msg_only | with_meta
                          # with_meta 는 component+level 을 붙인다. E5 비교용이며 대표 성능이 아니다.
-  max_length: 64         # msg_norm 토큰 길이 95 백분위수로 확정할 것
+  max_length: 64         # 확정. bert-base-uncased 토큰 길이 실측 결과,
+                         # 64 에서 kernel_mem/kernel_ops/app 이 100% 무손실,
+                         # normal 97.98%. 32 로 줄이면 app 의 53.4%, kernel_ops 의
+                         # 77.4% 만 남아 알럿 클래스가 잘린다 (macro F1 직격).
 
 # ---------------------------------------------------------------- 학습
 train:
