@@ -32,6 +32,7 @@ from src.dataset import CLASSES, LogDataset, build_text, encode_unique
 from src.evaluate import score
 
 PLOT_EVERY = 100
+METRICS = ["val_macro_f1", "inner_val_macro_f1", "inner_val_unseen_macro_f1"]
 E1C_TEST = 0.9316    # 넘어야 할 선. 그래프에 기준선으로 그린다.
 E1C_UNSEEN = 0.7451  # 미등장 템플릿만 골라낸 E1c. 진짜 비교 대상이다 (docs/RISKS.md 9).
 
@@ -203,12 +204,18 @@ def main():
     ap.add_argument("--fresh", action="store_true", help="last.pt 를 무시하고 처음부터")
     ap.add_argument("--inner-val-frac", type=float, default=0.0,
                     help="train 뒤쪽을 시간순으로 떼어 미등장 템플릿 검증셋으로 쓴다 (0 이면 끔)")
+    ap.add_argument("--select-metric", choices=METRICS,
+                    help="early_stopping.metric 을 이번 실행에만 덮어쓴다")
     ap.add_argument("--config", default=config.DEFAULT_CONFIG)
     args = ap.parse_args()
 
     cfg = config.load(args.config)
     tcfg, dcfg = cfg["train"], cfg["dataset"]
+    if args.select_metric:
+        tcfg["early_stopping"]["metric"] = args.select_metric
     metric = tcfg["early_stopping"]["metric"]
+    if metric not in METRICS:
+        raise SystemExit(f"early_stopping.metric 이 {metric} 이다. {METRICS} 중 하나여야 한다.")
     if metric.startswith("inner_val") and not args.inner_val_frac:
         raise SystemExit(f"early_stopping.metric 이 {metric} 인데 --inner-val-frac 이 0 이다.")
     torch.manual_seed(cfg["seed"])
