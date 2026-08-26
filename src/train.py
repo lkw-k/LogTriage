@@ -5,8 +5,11 @@
 - 에폭이 끝날 때마다 last.pt 에 모델·옵티마이저·스케줄러·RNG·조기종료 상태를 전부 남긴다.
   컴퓨터가 꺼져도 같은 명령을 다시 실행하면 그 지점부터 이어서 학습한다.
 - runs/<exp_id>/progress.html 을 브라우저로 열어두면 5초마다 스스로 갱신된다.
-- 베스트 체크포인트는 val macro F1 기준. 다만 val 은 test 의 대리 지표가 약하다는 것이
-  E1 에서 확인됐다 (docs/RISKS.md A) — 에폭별 로그를 반드시 같이 볼 것.
+- 베스트 체크포인트는 early_stopping.metric 기준. 기본값 val_macro_f1 은 test 의 대리
+  지표가 아니다 — E2c 에서 val 0.9941 이 test 0.6829 로 무너졌다 (docs/RISKS.md A).
+- --inner-val-frac 을 주면 train 뒤쪽을 시간순으로 떼어 미등장 템플릿 검증셋을 만들고
+  inner_val_unseen_macro_f1 로 체크포인트를 고를 수 있다. val 로는 이 지표를 만들 수
+  없다 (val 미등장에 kernel_mem 3행, app 0행).
 """
 
 import argparse
@@ -29,7 +32,8 @@ from src.dataset import CLASSES, LogDataset, build_text, encode_unique
 from src.evaluate import score
 
 PLOT_EVERY = 100
-E1C_TEST = 0.9316  # 넘어야 할 선. 그래프에 기준선으로 그린다.
+E1C_TEST = 0.9316    # 넘어야 할 선. 그래프에 기준선으로 그린다.
+E1C_UNSEEN = 0.7451  # 미등장 템플릿만 골라낸 E1c. 진짜 비교 대상이다 (docs/RISKS.md 9).
 
 
 def class_weights(labels, device):
@@ -39,7 +43,19 @@ def class_weights(labels, device):
     return torch.tensor(w, dtype=torch.float32, device=device)
 
 
-def fingerprint(tcfg, dcfg, train_path, n_rows):
+def inner_split(df, ref_ts, val_frac):
+    """train 안에서 시간순으로 검증 구간을 떼어낸다. 경계는 ref_ts 가 정한다.
+
+    df 의 행 위치로 자르면 안 된다. sample 이 시간축을 따라 불균등하게 행을 지우기 때문에
+    표집된 파일의 80% 지점은 시간의 80% 지점이 아니다. train_cap 을 위치로 자르면
+    inner-val 미등장에서 알럿 3클래스가 전부 0행이 된다. ref_ts 는 지우기 전
+    train.parquet 의 unix_ts 다.
+    """
+    t = int(ref_ts[int(len(ref_ts) * (1 - val_frac))])
+    return df[df["unix_ts"] < t], df[df["unix_ts"] >= t], t
+
+
+def fingerprint(tcfg, dcfg, train_path, n_rows, inner_val_frac):
     """이어서 학습해도 되는 판인지 확인하는 지문. 하나라도 다르면 재개하지 않는다."""
     return {
         "train_file": Path(train_path).name,
@@ -50,6 +66,8 @@ def fingerprint(tcfg, dcfg, train_path, n_rows):
         "learning_rate": float(tcfg["learning_rate"]),
         "max_length": dcfg["max_length"],
         "input_mode": dcfg["input_mode"],
+        "inner_val_frac": float(inner_val_frac),
+        "select_metric": tcfg["early_stopping"]["metric"],
     }
 
 
@@ -93,6 +111,10 @@ def save_plot(rundir, hist, steps):
     if hist:
         ep = [h["epoch"] for h in hist]
         ax2.plot(ep, [h["val_macro_f1"] for h in hist], "o-", lw=2, label="val macro F1")
+        if "inner_val_unseen_macro_f1" in hist[0]:
+            ax2.plot(ep, [h["inner_val_unseen_macro_f1"] for h in hist], "s-", lw=2,
+                     color="darkorange", label="inner-val unseen")
+            ax2.axhline(E1C_UNSEEN, color="darkorange", ls=":", lw=1, label="E1c unseen 0.7451")
         for c in CLASSES:
             ax2.plot(ep, [h["per_class_f1"][c] for h in hist], "--", lw=1, label=c)
         ax2.set_xticks(ep)
@@ -119,11 +141,11 @@ p{{color:#888;font-size:12px}}</style></head><body>
 <div class="s">에폭 <b>{epoch}/{max_epochs}</b></div>
 <div class="s">스텝 <b>{step:,}</b>/{total_steps:,}</div>
 <div class="s">loss <b>{loss:.4f}</b></div>
-<div class="s">베스트 val macro F1 <b>{best:.4f}</b> (에폭 {best_epoch})</div>
+<div class="s">베스트 {metric} <b>{best:.4f}</b> (에폭 {best_epoch})</div>
 <div class="s">경과 <b>{elapsed:.1f}분</b></div>
 <div class="s">에폭 남은 시간 <b>{eta:.1f}분</b></div>
 <img src="progress.png?t={stamp}">
-<table><tr><th>에폭</th><th>train loss</th><th>val macro F1</th><th>시간</th>{heads}</tr>
+<table><tr><th>에폭</th><th>train loss</th><th>{metric}</th><th>시간</th>{heads}</tr>
 {rows}</table>
 <p>5초마다 자동 갱신. 학습이 끝나면 갱신이 멈춥니다.</p></body></html>"""
 
@@ -135,7 +157,7 @@ def render(rundir, exp_id, hist, steps, status):
         cells = "".join("<td>{:.3f}</td>".format(h["per_class_f1"][c]) for c in CLASSES)
         rows += (
             "<tr><td>{}</td><td>{:.4f}</td><td><b>{:.4f}</b></td><td>{:.1f}분</td>{}</tr>".format(
-                h["epoch"], h["train_loss"], h["val_macro_f1"], h["minutes"], cells
+                h["epoch"], h["train_loss"], h[status["metric"]], h["minutes"], cells
             )
         )
     heads = "".join(f"<th>{c}</th>" for c in CLASSES)
@@ -179,11 +201,16 @@ def main():
     ap.add_argument("--exp-id", required=True)
     ap.add_argument("--input", help="기본값은 processed/train_sampled.parquet")
     ap.add_argument("--fresh", action="store_true", help="last.pt 를 무시하고 처음부터")
+    ap.add_argument("--inner-val-frac", type=float, default=0.0,
+                    help="train 뒤쪽을 시간순으로 떼어 미등장 템플릿 검증셋으로 쓴다 (0 이면 끔)")
     ap.add_argument("--config", default=config.DEFAULT_CONFIG)
     args = ap.parse_args()
 
     cfg = config.load(args.config)
     tcfg, dcfg = cfg["train"], cfg["dataset"]
+    metric = tcfg["early_stopping"]["metric"]
+    if metric.startswith("inner_val") and not args.inner_val_frac:
+        raise SystemExit(f"early_stopping.metric 이 {metric} 인데 --inner-val-frac 이 0 이다.")
     torch.manual_seed(cfg["seed"])
     np.random.seed(cfg["seed"])
 
@@ -196,10 +223,22 @@ def main():
     cols = ["msg_norm", "label4"]
     if dcfg["input_mode"] == "with_meta":
         cols += ["component", "level"]
-    tr = pd.read_parquet(train_path, columns=cols)
+    tr_cols = cols + ["unix_ts"] if args.inner_val_frac else cols
+    tr = pd.read_parquet(train_path, columns=tr_cols)
     val = pd.read_parquet(processed / "val.parquet", columns=cols)
-    fp = fingerprint(tcfg, dcfg, train_path, len(tr))
+    fp = fingerprint(tcfg, dcfg, train_path, len(tr), args.inner_val_frac)
     print(f"train {len(tr):,}줄 ({train_path.name}) | val {len(val):,}줄 | device {device}")
+
+    iv, iv_unseen = None, None
+    if args.inner_val_frac:
+        ref_ts = pd.read_parquet(processed / "train.parquet", columns=["unix_ts"])["unix_ts"]
+        tr, iv, boundary = inner_split(tr, ref_ts.to_numpy(), args.inner_val_frac)
+        iv_unseen = ~iv["msg_norm"].isin(set(tr["msg_norm"])).to_numpy()
+        dist = dict(iv.loc[iv_unseen, "label4"].value_counts())
+        print(f"inner split: 경계 unix_ts {boundary} | "
+              f"inner-train {len(tr):,}줄 / inner-val {len(iv):,}줄")
+        print(f"  inner-val 미등장 {iv_unseen.sum():,}줄 "
+              f"({iv_unseen.mean() * 100:.1f}%)  클래스별 {dist}")
 
     tok = AutoTokenizer.from_pretrained(tcfg["model_name"])
     model = AutoModelForSequenceClassification.from_pretrained(
@@ -212,6 +251,9 @@ def main():
     val_enc, val_codes = encode_unique(build_text(val, dcfg["input_mode"]), tok, dcfg["max_length"])
     print("고유 텍스트 train {:,}종 / val {:,}종".format(
         len(ds.input_ids), len(val_enc["input_ids"])))
+    if iv is not None:
+        iv_enc, iv_codes = encode_unique(
+            build_text(iv, dcfg["input_mode"]), tok, dcfg["max_length"])
 
     w = class_weights(tr["label4"].to_numpy(), device) if tcfg["class_weight"] else None
     lossf = torch.nn.CrossEntropyLoss(weight=w)
@@ -282,7 +324,7 @@ def main():
                 tail = f"loss {run / step:.4f}  경과 {el / 60:4.1f}분  남은 {eta / 60:4.1f}분"
                 print(f"{head}  {tail}", end="\r")
                 render(rundir, args.exp_id, hist, steps, {
-                    "state": f"에폭 {epoch} 학습 중", "epoch": epoch,
+                    "state": f"에폭 {epoch} 학습 중", "epoch": epoch, "metric": metric,
                     "max_epochs": tcfg["max_epochs"], "step": step, "total_steps": len(loader),
                     "loss": run / step, "best": max(best, 0.0), "best_epoch": best_epoch,
                     "elapsed": (time.perf_counter() - t_all) / 60, "eta": eta / 60})
@@ -296,22 +338,33 @@ def main():
             "minutes": (time.perf_counter() - t0) / 60,
             "per_class_f1": {c: s["per_class"][c]["f1"] for c in CLASSES},
         }
+        if iv is not None:
+            ipred = np.asarray(CLASSES)[
+                predict(model, iv_enc, iv_codes, device, bs * 4).argmax(axis=1)]
+            iy = iv["label4"].to_numpy()
+            rec["inner_val_macro_f1"] = score(iy, ipred)["macro_f1"]
+            rec["inner_val_unseen_macro_f1"] = score(
+                iy[iv_unseen], ipred[iv_unseen])["macro_f1"]
+
         hist.append(rec)
         with open(log_path, "a", encoding="utf-8") as f:
             f.write(json.dumps(rec) + "\n")
         print("\n에폭 {}  loss {:.4f}  val macro F1 {:.4f}  {:.1f}분  {}".format(
             epoch, rec["train_loss"], s["macro_f1"], rec["minutes"],
             " ".join("{}={:.3f}".format(c[:4], s["per_class"][c]["f1"]) for c in CLASSES)))
+        if iv is not None:
+            print("  inner-val {:.4f} | 미등장 {:.4f}".format(
+                rec["inner_val_macro_f1"], rec["inner_val_unseen_macro_f1"]))
 
-        if s["macro_f1"] > best:
-            best, best_epoch = s["macro_f1"], epoch
+        if rec[metric] > best:
+            best, best_epoch = rec[metric], epoch
             torch.save(model.state_dict(), rundir / "best.pt")
             print("  베스트 갱신 -> {}".format(rundir / "best.pt"))
 
         save_state(last_path, model, opt, sched, epoch, best, best_epoch, hist, steps, fp)
         print(f"  체크포인트 저장 -> {last_path} (여기서 꺼져도 이어서 학습 가능)")
         render(rundir, args.exp_id, hist, steps, {
-            "state": f"에폭 {epoch} 완료", "epoch": epoch,
+            "state": f"에폭 {epoch} 완료", "epoch": epoch, "metric": metric,
             "max_epochs": tcfg["max_epochs"], "step": len(loader), "total_steps": len(loader),
             "loss": rec["train_loss"], "best": best, "best_epoch": best_epoch,
             "elapsed": (time.perf_counter() - t_all) / 60, "eta": 0.0})
@@ -324,7 +377,7 @@ def main():
     ckpt = rundir / "checkpoint"
     model.save_pretrained(ckpt)
     tok.save_pretrained(ckpt)
-    print(f"\n베스트 에폭 {best_epoch}, val macro F1 {best:.4f} -> {ckpt}")
+    print(f"\n베스트 에폭 {best_epoch}, {metric} {best:.4f} -> {ckpt}")
 
     for split in ["val", "test"]:
         part = pd.read_parquet(processed / (split + ".parquet"), columns=cols)
@@ -335,6 +388,7 @@ def main():
 
     render(rundir, args.exp_id, hist, steps, {
         "state": "학습 완료", "epoch": best_epoch, "max_epochs": tcfg["max_epochs"],
+        "metric": metric,
         "step": len(loader), "total_steps": len(loader), "loss": hist[-1]["train_loss"],
         "best": best, "best_epoch": best_epoch,
         "elapsed": (time.perf_counter() - t_all) / 60, "eta": 0.0})

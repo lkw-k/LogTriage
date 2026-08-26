@@ -67,7 +67,9 @@ train:
   batch_size: 32
   max_epochs: 5
   early_stopping:
-    metric: val_macro_f1
+    metric: val_macro_f1   # val_macro_f1 | inner_val_macro_f1 | inner_val_unseen_macro_f1
+                           # inner_* 는 train.py --inner-val-frac 을 함께 줘야 한다.
+                           # val_macro_f1 은 test 의 대리 지표가 아니다 (docs/RISKS.md A).
     patience: 2
 
 # ---------------------------------------------------------------- 평가
