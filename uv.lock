@@ -338,6 +338,7 @@ name = "log-anomaly-classifier"
 version = "0.1.0"
 source = { virtual = "." }
 dependencies = [
+    { name = "joblib" },
     { name = "matplotlib" },
     { name = "pandas" },
     { name = "pyarrow" },
@@ -356,6 +357,7 @@ dev = [
 
 [package.metadata]
 requires-dist = [
+    { name = "joblib", specifier = "==1.5.3" },
     { name = "matplotlib", specifier = "==3.11.1" },
     { name = "pandas", specifier = "==3.0.5" },
     { name = "pyarrow", specifier = "==25.0.1" },

@@ -4,12 +4,14 @@
 E2(BERT)가 이 점수를 못 이기면 딥러닝을 쓸 이유를 다시 생각해야 한다 (SPEC 4-2).
 
 출력은 runs/<exp_id>/preds_{val,test}.parquet 이고 evaluate 가 채점한다.
+모델은 runs/<exp_id>/model.joblib 에 남긴다. 없으면 infer 가 붙을 데가 없다.
 """
 
 import argparse
 import time
 from pathlib import Path
 
+import joblib
 import pandas as pd
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.linear_model import LogisticRegression
@@ -94,6 +96,11 @@ def main():
 
     rundir = Path(cfg["paths"]["runs"]) / args.exp_id
     rundir.mkdir(parents=True, exist_ok=True)
+
+    model_path = rundir / "model.joblib"
+    joblib.dump({"vectorizer": vec, "clf": clf, "classes": CLASSES}, model_path)
+    print(f"모델 -> {model_path} ({model_path.stat().st_size / 1e6:.1f}MB)")
+
     for split in ["val", "test"]:
         part = pd.read_parquet(processed / f"{split}.parquet", columns=["msg_norm", "label4"])
         out = predict_frame(vec, clf, part)
