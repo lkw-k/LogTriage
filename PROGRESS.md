@@ -15,7 +15,7 @@
 - [x] 실험 확장 — E3 0.6410. **샘플링 축 종료** (E4 는 예측 가능해 생략, E5~E7 미착수)
 - [x] 추론 — calibrate / infer / predictor / adapters.bgl  (E2w 로 검증)
 - [ ] 트래픽 감지기 — detect 는 infer 안에서 동작. `parse_nasa` 미착수 (nasa.csv 미확보)
-- [ ] 공개 — README / HF 모델 카드
+- [ ] 공개 — README **완료**, HF 모델 카드 남음 (올릴 것은 E2w)
 
 **판정 기준은 미등장 템플릿 macro F1** (전체 F1 은 암기분 24.4% 가 섞여 있다):
 E0 0.2411 / E1 0.5192 / **E1c 0.7451** / E2c 0.4998 / E2i 0.5049 / E2w 0.7330 /
@@ -48,7 +48,7 @@ macro precision 이 0.9980 으로 평평). `holdout_rare` 271건 검증은 E1c �
 다음 (내가 만들 것):
 
 - `src/traffic/parse_nasa.py` — `nasa.csv` 미확보로 대기.
-- HF 업로드 + 모델 카드 (올릴 것은 E2w).
+- HF 업로드 + 모델 카드 (올릴 것은 E2w). 내용은 README 와 90% 겹친다.
 
 다음 후보 (사용자가 직접 실행, 선택):
 
