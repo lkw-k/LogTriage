@@ -95,8 +95,8 @@ base_model: bert-base-uncased
 Classifies **one Blue Gene/L server log line** into 4 classes so an operator knows *where to
 look*: `normal`, `kernel_mem` (hardware), `kernel_ops` (system config), `app` (code).
 
-Fine-tuned from `bert-base-uncased` on the [LogHub BGL](https://github.com/logpai/loghub)
-dataset. Full pipeline, experiment log, and the losing runs: {REPO_URL}
+Fine-tuned from `bert-base-uncased` on the BGL dataset (see **Data** below).
+Full pipeline, experiment log, and the losing runs: {REPO_URL}
 {b_line}
 
 ## Read this before you use it
@@ -147,7 +147,8 @@ and test.
 **The headline number is macro F1 on log templates that never appear in training.**
 Overall macro F1 mixes in {s["share"]:.1f}% of rows whose template the model memorized during
 training — on that subset every model trends toward 1.0000 as it overfits, which measures
-memorization, not skill. Accuracy is not reported at all: predicting all-`normal` scores 92.7%.
+memorization, not skill. Accuracy is not reported at all: labelling the whole test split
+`normal` already scores 93.5% (660,735 of {n_rows:,} rows are `normal`).
 
 | subset | rows | macro F1 |
 |---|---|---|
@@ -182,6 +183,21 @@ Per-class F1 on unseen templates:
   without one are meaningless.
 - The 4-class grouping is **this project's judgment, not an official taxonomy**. No complete
   BGL alert-code documentation exists, so the 41 raw categories were grouped by name.
+
+## Data
+
+BGL is a log of the **BlueGene/L supercomputer at Lawrence Livermore National Labs (LLNL)**
+(131,072 processors). Column 1 is `-` for non-alert lines and one of 41 codes otherwise.
+Original paper: Oliner & Stearley, *What Supercomputers Say: A Study of Five System Logs*,
+DSN 2007. Obtained via [LogHub](https://github.com/logpai/loghub), which makes it freely
+available **for research or academic work** and asks users to reference the repository URL
+and cite:
+
+> Jieming Zhu, Shilin He, Pinjia He, Jinyang Liu, Michael R. Lyu.
+> *Loghub: A Large Collection of System Log Datasets for AI-driven Log Analytics.*
+> IEEE ISSRE 2023. [arXiv:2008.06448](https://arxiv.org/abs/2008.06448)
+
+The raw log is **not redistributed here** — this repo contains only fine-tuned weights.
 
 ## Reproduce
 

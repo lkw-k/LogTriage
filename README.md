@@ -34,12 +34,13 @@ E0 0.2431 → E1 0.8988 → E1c 0.9993 → E2c **1.0000** 으로 단조 증가�
 아니라 암기가 완성돼 가는 것이다.
 
 `evaluate` 가 `--train-ref` 의 템플릿 집합으로 test 를 쪼개 `metrics.json` 에
-`seen` / `unseen` 으로 남긴다. accuracy 는 보고하지 않는다 — 전부 정상으로 찍어도 92.7% 다.
+`seen` / `unseen` 으로 남긴다. accuracy 는 보고하지 않는다 — test 를 전부 `normal` 로 찍기만 해도
+93.5% 가 나온다 (test 의 정상 비율 660,735/706,972).
 
 ## BERT 는 왜 졌나
 
 E2c 의 오분류는 흩어져 있지 않았다. **미등장 템플릿 1종(`MACHINE CHECK DCR read timeout`,
-14,481건, 실제로는 정상)이 전부였다.** BGL 에서 "MACHINE CHECK" 를 포함한 40,026행 중
+14,481건, 실제로는 정상)이 전부였다.** BGL 에서 machine check 를 포함한 40,026행(대소문자 무관) 중
 39,684행(99.1%)이 정상인데, `kernel_mem` 의 test support 가 100건뿐이라 이 한 템플릿의
 분류 결과가 미등장 macro F1 을 **0.73 ↔ 0.50** 사이에서 통째로 흔든다.
 
@@ -82,7 +83,17 @@ test 구간 원본 로그 719,665줄을 통과시킨 결과:
 ## 실행
 
 원본 로그는 용량·재배포 조건 때문에 저장소에 없다. [LogHub](https://github.com/logpai/loghub)
-에서 BGL 을 받아 `data/raw/BGL.log` 에 둔다 (4,747,963줄 / 알럿 7.34%). 인용 조건이 있다.
+에서 BGL 을 받아 `data/raw/BGL.log` 에 둔다 (4,747,963줄 / 알럿 348,460건 = 7.34%).
+
+**데이터 출처.** BGL 은 Lawrence Livermore National Labs(LLNL)의 BlueGene/L 슈퍼컴퓨터
+(프로세서 131,072개)에서 수집된 로그다. 첫 열의 `-` 가 정상, 나머지 41개 코드가 알럿이다.
+원 논문은 Oliner & Stearley, *What Supercomputers Say: A Study of Five System Logs*, DSN 2007.
+배포처인 LogHub 는 **연구·학술 목적으로 자유롭게 쓸 수 있으나, 사용 시 저장소 URL 을 밝히고
+아래를 인용할 것**을 요구한다.
+
+> Jieming Zhu, Shilin He, Pinjia He, Jinyang Liu, Michael R. Lyu.
+> *Loghub: A Large Collection of System Log Datasets for AI-driven Log Analytics.*
+> IEEE ISSRE 2023. [arXiv:2008.06448](https://arxiv.org/abs/2008.06448)
 
 ```bash
 uv sync    # Python 3.11. pip 을 직접 호출하지 않는다.
@@ -160,8 +171,8 @@ uv run pytest && uv run ruff check src/
   `unknown` 이 아예 꺼진다 (val 에서 임계를 올려도 macro precision 이 0.9980 으로 평평).
   E2w 는 동작하지만 대표 모델이 아니다.
 - **트래픽 감지기의 NASA 검증(`parse_nasa`)은 미착수다.** 데이터를 확보하지 못했다.
-  EWMA z-score 자체는 `infer` 안에서 동작하지만, BGL 은 로그가 있는 분이 10% 뿐이라
-  최소 발생량 가드 없이는 쓸 수 없었다.
+  EWMA z-score 자체는 `infer` 안에서 동작하지만, BGL 은 로그가 있는 분이 9% 뿐이라
+  (train 11,293분 / 125,687분) 최소 발생량 가드 없이는 쓸 수 없었다.
 - **E4~E6 은 돌리지 않았다.** E4(balanced)는 E3 보다 나쁠 것이 예측돼 생략했고, 예측일 뿐이다.
 - **BGL 단일 시스템 로그다.** 다른 포맷은 `src/adapters/` 에 `(timestamp, message)` 변환기를
   추가해야 하고, 어댑터 없이 넣은 결과는 무의미하다.
