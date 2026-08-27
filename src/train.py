@@ -260,8 +260,12 @@ def main():
               f"({iv_unseen.mean() * 100:.1f}%)  클래스별 {dist}")
 
     tok = AutoTokenizer.from_pretrained(tcfg["model_name"])
+    # id2label 을 안 넣으면 config.json 에 LABEL_0..3 이 박힌다. 체크포인트를 받은
+    # 사람이 pipeline 으로 돌렸을 때 kernel_mem 대신 LABEL_1 이 나온다.
     model = AutoModelForSequenceClassification.from_pretrained(
-        tcfg["model_name"], num_labels=tcfg["num_labels"]
+        tcfg["model_name"], num_labels=tcfg["num_labels"],
+        id2label={i: c for i, c in enumerate(CLASSES)},
+        label2id={c: i for i, c in enumerate(CLASSES)},
     ).to(device)
 
     ds = LogDataset(tr, tok, dcfg["max_length"], dcfg["input_mode"])

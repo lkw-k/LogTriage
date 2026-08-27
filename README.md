@@ -190,6 +190,29 @@ uv run pytest && uv run ruff check src/
 - 발생량 감지기의 NASA 검증(`parse_nasa`)은 데이터 미확보로 미착수다. EWMA z-score 자체는
   `infer` 안에서 동작한다.
 
+## CI / 배포
+
+[![CI](https://github.com/lkw-k/LogTriage/actions/workflows/ci.yml/badge.svg)](https://github.com/lkw-k/LogTriage/actions/workflows/ci.yml)
+
+CI 는 매 푸시마다 **캐시된 락파일 그대로 리눅스에서 클론-설치-테스트**를 돌린다.
+"내 컴퓨터에서만 되는" 상태를 막는 게 목적이라 `uv sync --frozen` 을 쓴다.
+데이터가 없어도 픽스처(`BGL_2k.log`)로 `parse_bgl → label_map → normalize` 까지 실제로 돌린다.
+
+모델 배포는 로컬에서 한다 (`runs/` 가 저장소에 없어 Actions 에서는 모델 파일을 볼 수 없다):
+
+```bash
+uv run python -m src.publish --exp-id E2w --repo illimax/bgl-log-triage-bert --dry-run
+uv run python -m src.publish --exp-id E2w --repo illimax/bgl-log-triage-bert
+```
+
+**모델 카드의 평가 수치는 `runs/<exp_id>/metrics.json` 에서 생성한다.** 손으로 적지 않으므로
+재학습 → `evaluate` → `publish` 만 하면 카드가 새 수치로 갱신된다. 모델은 바뀌었는데 카드는
+옛 숫자인 상태가 생기지 않는다.
+
+> **HF 에서 이 모델을 쓸 때는 반드시 정규화를 먼저 해야 한다.** 원본 로그를 그대로 넣으면
+> test 719,665줄 중 **12.95% 의 예측이 바뀐다** (`normal`→`kernel_ops` 78,674 /
+> `normal`→`kernel_mem` 14,481). 규칙은 모델 카드에 코드째 실려 있다.
+
 ## 문서
 
 [docs/SPEC.md](docs/SPEC.md) 설계 · [experiments.md](experiments.md) 실험 기록 ·

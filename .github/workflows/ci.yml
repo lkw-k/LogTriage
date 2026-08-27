@@ -1,0 +1,44 @@
+name: CI
+
+# 이 워크플로의 목적은 "남이 클론해서 그대로 돌릴 수 있는가" 를 매 푸시마다 증명하는 것이다.
+# uv.lock 을 --frozen 으로 그대로 설치한다. 락이 깨지면 여기서 빨간불이 켜져야 한다.
+#
+# 데이터(data/) 와 학습 산출물(runs/) 은 저장소에 없다. 테스트는 tests/fixtures/BGL_2k.log
+# 만 쓰므로 원본 로그 없이 전부 돈다.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: uv 설치
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+          cache-dependency-glob: uv.lock
+
+      - name: 의존성 설치 (락파일 그대로)
+        # --frozen: uv.lock 을 갱신하지 않는다. 락과 pyproject 가 어긋나면 실패한다.
+        # torch 는 pyproject 에서 cu126 인덱스로 고정돼 있고 linux x86_64 휠이
+        # 락에 들어 있다. CPU 러너에서도 설치·import 는 된다 (CUDA 런타임만 없음).
+        run: uv sync --frozen
+
+      - name: 린트
+        run: uv run ruff check src/ tests/
+
+      - name: 테스트
+        run: uv run pytest -q
+
+      - name: 픽스처로 파이프라인 스모크
+        # 원본 로그 없이 돌릴 수 있는 데까지 실제로 돌려본다.
+        run: |
+          uv run python -m src.parse_bgl --input tests/fixtures/BGL_2k.log --output /tmp/parsed.parquet
+          uv run python -m src.label_map --input /tmp/parsed.parquet --output /tmp/labeled.parquet
+          uv run python -m src.normalize --input /tmp/labeled.parquet --output /tmp/norm.parquet
