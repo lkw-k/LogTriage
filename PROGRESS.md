@@ -21,9 +21,12 @@ E0 0.2411 / E1 0.5192 / **E1c 0.7451** / E2c 0.4998 / E2i 0.5049 / **E2w 0.7330*
 
 다음 후보 (사용자가 직접 실행):
 
-    # A. SPEC 대표 성능 E2. none 3,299,255행, 에폭당 103,102스텝(약 52분).
-    #    에폭 1을 넘기면 오탐이 돌아오므로 max-epochs 2 로 묶는다 (약 2시간).
-    uv run python -m src.train --exp-id E2 --inner-val-frac 0.20 --select-metric inner_val_unseen_macro_f1 --no-class-weight --max-epochs 2
+    # A. SPEC 대표 성능 E2. none 3,299,255행, inner-train 약 264만행
+    #    = 에폭당 82,482스텝(약 80분). 조기 종료(patience 2)에 맡긴다.
+    #    에폭 1이 최고면 에폭 3에서 멈춰 약 4시간, 더 뒤면 최대 7.5시간.
+    #    --max-epochs 로 묶지 않는다: LR 스케줄과 지문이 같이 바뀌어
+    #    나중에 더 돌리려면 처음부터 다시 해야 한다.
+    uv run python -m src.train --exp-id E2 --inner-val-frac 0.20 --select-metric inner_val_unseen_macro_f1 --no-class-weight
     uv run python -m src.evaluate --exp-id E2
 
     # B. (선택) 대조군. 가중치를 켠 채 에폭 1만. 6분. 두 원인의 기여를 분리한다.
