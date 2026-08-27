@@ -86,6 +86,13 @@ infer:
   min_count: 5           # 비율 판정에 필요한 최소 건수 (로그 적은 구간 오탐 방지)
   z_warning: 3.0
   z_critical: 5.0
+  # 평시 기준선에서 뺄 장애 구간 [시작, 끝). 학습 데이터는 건드리지 않고
+  # calibrate 의 class_ratio_mean/std 계산에서만 뺀다.
+  # train 의 kernel_mem 217,821행 중 215,673행(99.0%)이 이 3일에 몰려 있어,
+  # 포함하면 mean+3σ 임계가 0.6068 이 되어 구간의 61%가 kernel_mem 이어야
+  # warning 이 뜬다. experiments.md 2026-08-27 항목 참조.
+  baseline_exclude:
+    - ["2005-06-12", "2005-06-15"]
   unknown_ratio_warning: 0.10
   top_samples: 3
 
