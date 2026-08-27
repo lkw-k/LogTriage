@@ -13,8 +13,8 @@
 - [x] 선택 지표 — train --inner-val-frac / --select-metric
 - [x] 학습 — **E2 0.7760 (대표)**. E2c 0.6829 / E2i 0.6429 / E2w 0.8289
 - [x] 실험 확장 — E3 0.6410. **샘플링 축 종료** (E4 는 예측 가능해 생략, E5~E7 미착수)
-- [ ] 추론 — calibrate / infer  (**모듈 자체가 아직 없음**)
-- [ ] 트래픽 감지기 — parse_nasa / detect
+- [x] 추론 — calibrate / infer / predictor / adapters.bgl  (E2w 로 검증)
+- [ ] 트래픽 감지기 — detect 는 infer 안에서 동작. `parse_nasa` 미착수 (nasa.csv 미확보)
 - [ ] 공개 — README / HF 모델 카드
 
 **판정 기준은 미등장 템플릿 macro F1** (전체 F1 은 암기분 24.4% 가 섞여 있다):
@@ -29,10 +29,20 @@ E2 0.5144 / E3 0.5011
 0.73 ↔ 0.50 으로 흔든다. 발화 조건은 (1) 학습셋 kernel_mem 실효 비중이 높거나
 (2) 2에폭 이상 돌리거나. 자세한 표는 `experiments.md` 2026-08-27 항목.
 
+추론 파이프라인 검증 (E2w, 원본 로그 그대로 통과, 파싱 실패 0.00%):
+
+| | 알림/일 | 탐지/일 | 오탐/일 | 재현율 |
+|---|---|---|---|---|
+| val (튜닝면) | 3.3 | 1.6 | **1.7** | 23.3% |
+| test (1회 보고) | 5.7 | 3.4 | **2.3** | 53.8% |
+
+오탐은 둘 다 목표 5건/일 안이다.
+
 다음 (내가 만들 것):
 
-- `src/calibrate.py` / `src/infer.py` — **모듈 자체가 아직 없다.** 기준 모델은 E1c.
-- `src/traffic/` — 빈 패키지. `nasa.csv` 미확보.
+- E1c 로 calibrate / infer 재검증 — `runs/E1c/model.joblib` 이 나온 뒤.
+- `src/traffic/parse_nasa.py` — `nasa.csv` 미확보로 대기.
+- HF 업로드 + 모델 카드 (올릴 것은 E2w).
 
 다음 후보 (사용자가 직접 실행, 선택):
 
