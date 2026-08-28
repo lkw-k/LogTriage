@@ -23,6 +23,8 @@ uv run python -m src.train     --config configs/base.yaml --exp-id E2
 uv run python -m src.evaluate  --exp-id E2
 uv run python -m src.calibrate --exp-id E2 --output runs/E2/calibration.json
 uv run python -m src.infer     --exp-id E2 --input data/raw/sample.log --output runs/E2/windows.jsonl
+uv run python -m src.traffic.parse_nasa --input data/raw/nasa.csv --output data/interim/nasa_per_min.parquet
+uv run python -m src.traffic.detect --input data/interim/nasa_per_min.parquet --output runs/traffic/anomalies.csv --expect-outage "1995-08-01 18:52" "1995-08-03 08:36"
 uv run pytest && uv run ruff check src/
 ```
 
