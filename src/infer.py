@@ -67,6 +67,24 @@ def judge(row, n, cal, icfg):
     return level, reasons
 
 
+def traffic_view(row, total, baseline, threshold):
+    """SPEC 5-3 의 traffic 필드. -> dict
+
+    **기준선이 min_baseline 미만인 구간의 z 는 내지 않는다.** 긴 무로그 구간 뒤에는
+    잔차 척도가 0 에 수렴해 z 가 발산한다 — NASA 62일에서 max|z| 가 5.26e+35 였고,
+    그 분들은 count>0 이라 run() 의 total==0 스킵을 통과해 이 자리에 그대로 찍혔다.
+    판정은 watchable 게이트가 막아주지만 출력은 막아주는 것이 없었다.
+    """
+    watch = bool(row["traffic_watch"])
+    z = float(row["traffic_z"])
+    return {
+        "count": total,
+        "baseline": round(float(baseline), 1),
+        "z": round(z, 2) if watch else None,
+        "flag": flag(z, threshold) if watch else "low_volume",
+    }
+
+
 def run(lines, cal, cfg, adapter):
     icfg = cfg["infer"]
     rows, bad = adapter.parse(lines)
@@ -106,13 +124,8 @@ def run(lines, cal, cfg, adapter):
             "n_logs": total,
             "class_counts": {c: int(row[c]) for c in CLASSES + ["unknown"]},
             "anomaly_ratio": round(float(sum(row[c] for c in ALERT) / total), 4),
-            "traffic": {
-                "count": total,
-                "baseline": round(float(baseline.loc[ts]), 1),
-                "z": round(float(row["traffic_z"]), 2),
-                "flag": (flag(float(row["traffic_z"]), cfg["traffic"]["z_threshold"])
-                         if row["traffic_watch"] else "low_volume"),
-            },
+            "traffic": traffic_view(row, total, baseline.loc[ts],
+                                    cfg["traffic"]["z_threshold"]),
             "alert": {"level": level, "reasons": reasons},
             "top_samples": [
                 {"raw": r.message, "pred": r.pred, "conf": round(float(r.conf), 4)}
