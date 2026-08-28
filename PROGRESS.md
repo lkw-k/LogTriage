@@ -3,7 +3,7 @@
 현재: **BERT 5판 전패. 대표 모델은 E1c(TF-IDF+로지스틱회귀)로 확정한다.**
 미등장 macro F1 기준 E1c **0.7451** vs BERT 최고 E2w 0.7330.
 샘플링 축(cap / none / ratio)은 세 지점을 다 찍고 닫았다 — 어느 것도 세 알럿 클래스를
-동시에 살리지 못한다. **2026-08-29 트래픽 감지기까지 닫혔다.** 남은 것은 HF 모델 카드다.
+동시에 살리지 못한다. **2026-08-29 트래픽 감지기까지 닫혔다. 계획된 항목은 전부 끝났다.**
 상세 내용은 `docs/SPEC.md`, 실험 수치는 `experiments.md`, 위기 기록은 `docs/RISKS.md`.
 
 - [x] 전처리 — parse_bgl / label_map / normalize
@@ -15,7 +15,7 @@
 - [x] 실험 확장 — E3 0.6410. **샘플링 축 종료** (E4 는 예측 가능해 생략, E5~E7 미착수)
 - [x] 추론 — calibrate / infer / predictor / adapters.bgl  (E2w 로 검증)
 - [x] 트래픽 감지기 — `parse_nasa` + 무응답 규칙 + NASA 허리케인 검증 **PASS**
-- [ ] 공개 — README **완료**, HF 모델 카드 남음 (올릴 것은 E2w)
+- [x] 공개 — README + HF 모델/카드 업로드 **완료** (E2w)
 
 **판정 기준은 미등장 템플릿 macro F1** (전체 F1 은 암기분 24.4% 가 섞여 있다):
 E0 0.2411 / E1 0.5192 / **E1c 0.7451** / E2c 0.4998 / E2i 0.5049 / E2w 0.7330 /
@@ -65,10 +65,26 @@ macro precision 이 0.9980 으로 평평). `holdout_rare` 271건 검증은 E1c �
 알림 수(E1c val 4.8 / test 5.1건/일)를 움직이지 않는다는 근거는 구조와 회귀 테스트뿐이고
 **실측이 아니다**. `docs/RISKS.md` F.
 
-다음 (내가 만들 것):
+**HF 공개는 이미 끝나 있다 (2026-08-29 확인).** 이 줄이 오래 "남음"으로 남아 있었으나
+실제로는 `a752482` 시점에 업로드와 카드 반영이 끝나 있었다. Hub 실물 확인 결과:
 
-- HF 업로드 + 모델 카드 (올릴 것은 E2w). 내용은 README 와 90% 겹친다.
-  **`runs/` 가 비어 있어 모델 재학습부터 필요하다.**
+    illimax/bgl-log-triage-bert
+      README.md            6,693 B   모델 카드
+      model.safetensors  438.0 MB   E2w 가중치
+      config.json / tokenizer.json / tokenizer_config.json
+
+카드 내용도 최신이다 — 정상 비율 93.5%(test 기준) 정정, E1c 0.7451 vs E2w 0.7330 병기,
+미등장/기등장 분리 평가표, 한계 6항목, LogHub 인용까지 들어 있다.
+
+**이 줄을 믿고 재작업하지 마라.** `publish.py` 는 `runs/<exp_id>/checkpoint` 와
+`metrics.json` 을 요구하는데 그건 로컬에 `runs/` 가 없을 때 나는 증상이지 미업로드의
+증거가 아니다. 상태 확인은 이 파일이 아니라 Hub 를 직접 봐라
+(`hf://models/illimax/bgl-log-triage-bert`). `docs/RISKS.md` 7 의 재발이다.
+
+**남은 것은 계획된 작업이 아니라 열린 위험뿐이다** (`docs/RISKS.md`):
+A 정직한 모델 선택 지표 없음 / E `unknown` 미작동으로 `holdout_rare` 271건 검증 불가 /
+F 무응답 규칙의 BGL 영향 미측정 / G·H·I 트래픽 설정·성능 정리.
+F 와 A·E 는 `BGL.log` 재확보가 선행 조건이다.
 
 다음 후보 (사용자가 직접 실행, 선택):
 
