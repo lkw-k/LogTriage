@@ -101,6 +101,12 @@ traffic:
   bucket: 1min
   ewma_span: 60
   z_threshold: 3.0
+  outage_minutes: 5  # 연속 0건이 이 분 수 이상이고 0 이 시작되기 직전 기준선이
+                     # min_baseline 이상이면 무응답(outage). z-score 는 완전 정지를
+                     # 표현하지 못한다 — EWMA 가 정지를 새 평시로 학습해 z 가 -2.48
+                     # 에서 멈추고(임계 -3 미달), 25분 뒤 watchable 이 꺼져 나머지
+                     # 37.6시간을 놓친다. NASA 62일에서 16건 = 0.26건/일.
+                     # experiments.md 2026-08-28 항목 참조.
   min_baseline: 20   # 기준선이 분당 이 건수 미만이면 트래픽 판정을 건너뛴다.
                      # BGL 은 로그가 있는 분이 10% 뿐이라 조용한 구간에서 잔차
                      # 표준편차가 0 에 붙어 z 가 폭주한다. 가드 없이 val 에서
