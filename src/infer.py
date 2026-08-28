@@ -18,7 +18,7 @@ from src import config, predictor
 from src.adapters import bgl
 from src.dataset import CLASSES
 from src.normalize import normalize
-from src.traffic.detect import ewma_z, flag, watchable
+from src.traffic.detect import ewma_z, flag, outage, watchable, zero_run
 
 ALERT = [c for c in CLASSES if c != "normal"]
 ADAPTERS = {bgl.NAME: bgl}
@@ -57,6 +57,12 @@ def judge(row, n, cal, icfg):
         if u > icfg["unknown_ratio_warning"]:
             raise_to("warning", f"unknown 비율 {u:.1%} — 미지의 로그 패턴 유입")
 
+    # 무응답은 watchable 조기 반환보다 앞에 온다. 정지가 길어지면 기준선이 내려가
+    # traffic_watch 가 False 가 되므로, 뒤에 두면 완전 정지에서 절대 도달하지 못한다.
+    if row["traffic_outage"]:
+        raise_to("critical",
+                 f"무응답 {int(row['traffic_zero_run'])}분 연속 — 서비스 정지 의심")
+
     tz = row["traffic_z"]
     if not row["traffic_watch"]:
         return level, reasons
@@ -77,11 +83,17 @@ def traffic_view(row, total, baseline, threshold):
     """
     watch = bool(row["traffic_watch"])
     z = float(row["traffic_z"])
+    if row["traffic_outage"]:
+        state = "outage"
+    elif watch:
+        state = flag(z, threshold)
+    else:
+        state = "low_volume"
     return {
         "count": total,
         "baseline": round(float(baseline), 1),
         "z": round(z, 2) if watch else None,
-        "flag": flag(z, threshold) if watch else "low_volume",
+        "flag": state,
     }
 
 
@@ -110,11 +122,14 @@ def run(lines, cal, cfg, adapter):
     baseline, z = ewma_z(n, cal["traffic_ewma_span"])
     counts["traffic_z"] = z
     counts["traffic_watch"] = watchable(baseline, cfg["traffic"]["min_baseline"])
+    counts["traffic_outage"] = outage(n, baseline, cfg["traffic"]["min_baseline"],
+                                      cfg["traffic"]["outage_minutes"])
+    counts["traffic_zero_run"] = zero_run(n)
 
     windows = []
     for ts, row in counts.iterrows():
         total = int(n.loc[ts])
-        if total == 0:
+        if total == 0 and not row["traffic_outage"]:
             continue
         level, reasons = judge(row, total, cal, icfg)
         part = df[df["bucket"] == ts]
@@ -123,7 +138,8 @@ def run(lines, cal, cfg, adapter):
             "window_start": ts.isoformat(),
             "n_logs": total,
             "class_counts": {c: int(row[c]) for c in CLASSES + ["unknown"]},
-            "anomaly_ratio": round(float(sum(row[c] for c in ALERT) / total), 4),
+            "anomaly_ratio": (round(float(sum(row[c] for c in ALERT) / total), 4)
+                              if total else 0.0),
             "traffic": traffic_view(row, total, baseline.loc[ts],
                                     cfg["traffic"]["z_threshold"]),
             "alert": {"level": level, "reasons": reasons},
